@@ -1,0 +1,168 @@
+// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+/*
+ * Device Tree Source for MIBOX-668M2 (蜂助手 S1 4G CPE)
+ *
+ * 硬件：MediaTek MT7628DAN + 2x Quectel EC200（EC200T CAT4 / EC200N CAT1）
+ *       8MB SPI-NOR flash / 64MB DDR2
+ *
+ * 来源说明（重要）：
+ *   本文件以 OpenWrt 官方主线 target/linux/ramips/dts/mt7628an_wrtnode_wrtnode2.dtsi
+ *   为骨架。经本项目对社区固件 DTB 的反编译对比，确认社区固件的设备树即该板子的
+ *   改版（分区布局逐字节一致）。相对官方模板，本板差异均以 ★ 标注。
+ *
+ *   分区布局（与 WRTnode 2P 相同）：
+ *     u-boot      @ 0x000000  0x030000  read-only
+ *     u-boot-env  @ 0x030000  0x010000  read-only
+ *     factory     @ 0x040000  0x010000  read-only   （MAC 在偏移 0x28，EEPROM 在 0x0）
+ *     firmware    @ 0x050000  0x1FB000
+ */
+
+#include "mt7628an.dtsi"
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/leds/common.h>
+
+/ {
+	compatible = "mibox,668m2", "mediatek,mt7628an-soc";   /* ★改：本板 compatible */
+	model = "MIBOX-668M2";                                 /* ★改：本板 model */
+
+	chosen {
+		bootargs = "console=ttyS0,57600";              /* ★改：波特率 57600 */
+	};
+
+	aliases {                                              /* ★加：LED 别名 */
+		led-boot = &led_run;
+		led-failsafe = &led_run;
+		led-running = &led_run;
+		led-upgrade = &led_run;
+	};
+
+	keys {
+		compatible = "gpio-keys";
+
+		reset {
+			label = "reset";
+			gpios = <&gpio 11 GPIO_ACTIVE_LOW>;        /* ★改：reset = GPIO11 */
+			linux,code = <KEY_RESTART>;
+		};
+	};
+
+	leds {                                                 /* ★加：run / wifi / wan */
+		compatible = "gpio-leds";
+
+		led_run: run {
+			function = LED_FUNCTION_STATUS;
+			color = <LED_COLOR_ID_BLUE>;
+			gpios = <&gpio 3 GPIO_ACTIVE_LOW>;
+		};
+
+		wifi {
+			function = LED_FUNCTION_WLAN;
+			color = <LED_COLOR_ID_BLUE>;
+			gpios = <&gpio 44 GPIO_ACTIVE_LOW>;
+			linux,default-trigger = "phy0tpt";
+		};
+
+		wan {
+			function = LED_FUNCTION_WAN;
+			color = <LED_COLOR_ID_BLUE>;
+			gpios = <&gpio 37 GPIO_ACTIVE_LOW>;
+		};
+	};
+};
+
+&state_default {
+	/* ★改：按社区固件实际值覆盖 gpio 复用组；★不包含 i2c（模组上电要保持 i2c 功能） */
+	gpio {
+		groups = "gpio", "refclk", "wdt", "wled_an";
+		function = "gpio";
+	};
+};
+
+&spi0 {
+	status = "okay";
+
+	flash@0 {
+		compatible = "jedec,spi-nor";
+		reg = <0>;
+		spi-max-frequency = <10000000>;
+		broken-flash-reset;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 {
+				label = "u-boot";
+				reg = <0x0 0x30000>;
+				read-only;
+			};
+
+			partition@30000 {
+				label = "u-boot-env";
+				reg = <0x30000 0x10000>;
+				read-only;
+			};
+
+			partition@40000 {
+				label = "factory";
+				reg = <0x40000 0x10000>;
+				read-only;
+
+				nvmem-layout {
+					compatible = "fixed-layout";
+					#address-cells = <1>;
+					#size-cells = <1>;
+
+					eeprom_factory_0: eeprom@0 {
+						reg = <0x0 0x400>;
+					};
+
+					macaddr_factory_28: macaddr@28 {   /* ★改：MAC @ 0x28 */
+						reg = <0x28 0x6>;
+					};
+				};
+			};
+
+			partition@50000 {
+				compatible = "denx,uimage";
+				label = "firmware";
+				reg = <0x50000 0x1fb0000>;
+			};
+		};
+	};
+};
+
+&uart1 {
+	status = "okay";
+};
+
+&i2c {                                                     /* ★关键：EC200 上电经 I2C 0x39 */
+	status = "okay";
+};
+
+&ethernet {
+	nvmem-cells = <&macaddr_factory_28>;                   /* ★改：MAC 来源 */
+	nvmem-cell-names = "mac-address";
+};
+
+&esw {
+	mediatek,portmap = <0x07>;                             /* ★改：端口映射（WAN 在 1 号口） */
+};
+
+&sdhci {
+	status = "okay";                                       /* 与官方模板一致 */
+};
+
+&pcie {
+	status = "okay";                                       /* 与官方模板一致 */
+};
+
+&wmac {
+	status = "okay";
+
+	nvmem-cells = <&eeprom_factory_0>;
+	nvmem-cell-names = "eeprom";
+};
