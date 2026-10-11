@@ -1,0 +1,207 @@
+#!/bin/sh /etc/rc.common
+# MIBOX-668M2: 给两个 EC200 模组上电（i2c 芯片 @0x39），解析它们的端口，
+#              并按 /etc/config/mifi 的 option link 决定走哪条数据通路：
+#
+#   link 'rndis'（默认）→ 原生 RNDIS：模组自己拨号 + DHCP + NAT，
+#                          网卡按 USB 路径重命名成 rndis-modem1/2（稳定名），
+#                          主机地址手工指定（两模块 RNDIS 同网段，必须错开）。
+#   link 'ppp'          → 原路：PPP over USB-serial（pppd + chat + mifi-dial.sh）。
+#
+# 为什么要做成开关：RNDIS 与 PPP 是两条完全独立的通路，切换只需改一个 uci 值，
+# 不用重编译、不用重刷。出问题可以一行切回去。
+#
+# ★ ttyUSB / usbN 编号每次上电都可能变（2026-09-18 实测换过），
+#   所以一切都按【USB 路径】解析：modem1 = 1-1.1，modem2 = 1-1.2。
+
+START=18
+
+I2C_BUS=0
+I2C_ADDR=0x39
+OFF_FRAME="0x06 0x00 0x88 0x00 0x44 0x00 0x00 0x3a 0x00 0x0a"
+
+. /lib/functions.sh
+
+# 该模组 RNDIS 网卡的稳定名 + 主机地址（同网段必须错开）
+# ★ 主机地址用厂商原固件里的 .2 / .3（在模组 DHCP 池之外）
+rndis_dev() { echo "rndis-$1"; }
+rndis_ip() {
+	case "$1" in
+	modem1) echo 192.168.43.2 ;;
+	modem2) echo 192.168.43.3 ;;
+	esac
+}
+
+start() {
+	local i r chk on_frame d port1 port2 link1 link2 enabled
+	local _m _wa _wm _wd _uc
+
+	modprobe i2c-mt7621 2>/dev/null
+	modprobe i2c-dev 2>/dev/null
+
+	config_load mifi
+	config_get enabled power enable 1
+
+	# ★★ 总开关 mifi.power.enable（默认 1 = 完全保持原行为，不变）----------
+	# 为什么需要它：本脚本 START=18，排在 S20network（WiFi bring-up）之前，
+	# 且是普通 shell start()（**没有** USE_PROCD）⇒ 会【同步阻塞】后面所有服务。
+	# 2026-09-18 实测它跑满约 90 秒：
+	#     i2c 上电 + 等 ttyUSB 枚举   12s
+	#     mifi-rndis.sh modem1        18s（第 1 个 APN cmiot 就成功）
+	#     mifi-rndis.sh modem2        60s ← ★ 固定白等
+	#   modem2 那 60 秒是可算出来的：它的卡被运营商拒注册（+CGATT: 0），
+	#   而脚本要按 cmiot→cmnet→3gnet→ctnet 逐个试，每个 APN 的 AT 序列固定
+	#   14 秒（at_send 里 sleep 1 + wait 2/3）⇒ 4 × 14 = 56 秒，且必然全失败。
+	# 后果：WiFi 被推迟到内核 68.9 秒才 up（dmesg 实测；正常机器 15~20 秒）。
+	# 置 0 后本脚本立刻返回 ⇒ S18 不再阻塞 ⇒ WiFi 提前约 60~90 秒。
+	#
+	# ★ 只让本脚本退出【不够】：netifd 仍会去起不存在的网卡（报错），
+	#   mwan3track 会对不存在的接口反复探测失败（刷日志）。所以这里把
+	#   network.modemN.auto 和 mwan3 一并同步成一致状态 —— 置 0 时摘除、
+	#   改回 1 时自动恢复，用户不必去改四个地方。
+	#   仅在值不匹配时才 commit，正常开机不会写 flash。
+	if [ "$enabled" = "1" ]; then _wa=1; _wm=1; _wd=1; else _wa=0; _wm=0; _wd=0; fi
+	_uc=0
+	for _m in modem1 modem2; do
+		[ "$(uci -q get network.$_m.auto)" = "$_wa" ] || { uci -q set "network.$_m.auto=$_wa"; _uc=1; }
+		[ "$(uci -q get mwan3.$_m.enabled)" = "$_wm" ] || { uci -q set "mwan3.$_m.enabled=$_wm"; _uc=1; }
+	done
+	[ "$(uci -q get mwan3.default_rule.enabled)" = "$_wd" ] || { uci -q set "mwan3.default_rule.enabled=$_wd"; _uc=1; }
+	if [ "$_uc" = "1" ]; then
+		uci -q commit network
+		uci -q commit mwan3
+	fi
+
+	if [ "$enabled" != "1" ]; then
+		logger -t mifi-modem "mifi.power.enable=0 ⇒ 跳过 4G 初始化（不启动模组）；已摘除 network.modemN / mwan3.modemN，WiFi 不再被 S18 阻塞"
+		exit 0
+	fi
+
+	config_get r power routing 0xa0
+	config_get link1 modem1 link rndis
+	config_get link2 modem2 link rndis
+	r=$((r))
+	chk=$(( (0xf0 + 0x3a + r + 0x30 + 0x44) & 0xffff ))
+	on_frame=$(printf '0x%02x 0x%02x 0x%02x 0x%02x 0x44 0x00 0xf0 0x3a 0x%02x 0x30' \
+		0x06 0x00 $((chk & 0xff)) $(((chk >> 8) & 0xff)) "$r")
+
+	i2ctransfer -y "$I2C_BUS" w10@"$I2C_ADDR" $OFF_FRAME
+	sleep 3
+	i2ctransfer -y "$I2C_BUS" w10@"$I2C_ADDR" $on_frame
+
+	# ★ 等待上限必须 > 模组实际上电到枚举完成的时间。
+	#   2026-09-18 dmesg 实测（相对内核启动）：
+	#     [27.8s] usb 1-1.1 首次出现
+	#     [29.3s] usb 1-1.1 USB disconnect      ← EC200 内部切模式后重枚举
+	#     [33.7s] usb 1-1.2 出现 → iface 3 = ttyUSB1
+	#     [34.4s] usb 1-1.1 重新出现 → iface 3 = ttyUSB4
+	#   即"i2c 上电 → iface 3 的 ttyUSB 就绪"约需 28 秒。
+	#   原来只等 30 次（30 秒）→ 余量不到 3 秒，属于会偶发失败的临界值；
+	#   一旦超时，network.modemN.device 就不会被写入 → ppp 报 NO_DEVICE
+	#   → 表现为"4G 时好时坏 / 这次开机没网"。放宽到 120 次。
+	#   正常情况解析到就立刻 break，不影响开机速度；只有模组真的不在时
+	#   才会等满（这时日志里有 WARN 可查）。
+	port1=""
+	port2=""
+	i=0
+	while [ "$i" -lt 120 ]; do
+		for d in /sys/bus/usb-serial/devices/*; do
+			case "$(readlink "$d")" in
+				*1-1.1:1.3*) port1="${d##*/}" ;;
+				*1-1.2:1.3*) port2="${d##*/}" ;;
+			esac
+		done
+		[ -n "$port1" ] && [ -n "$port2" ] && break
+		sleep 1
+		i=$((i + 1))
+	done
+
+	logger -t mifi-modem "routing=0x$(printf %02x "$r") modem1=${port1:-none} modem2=${port2:-none} waited=${i}s link1=$link1 link2=$link2"
+
+	if [ -z "$port1" ] || [ -z "$port2" ]; then
+		logger -t mifi-modem "WARN: 模组未在 ${i}s 内全部解析（modem1=${port1:-none} modem2=${port2:-none}），4G 可能起不来；检查 i2c 供电与 USB 枚举"
+	fi
+
+	# ---- RNDIS 通路【同步段】：只等网卡 + 重命名成稳定名 --------------------
+	# 必须在 netifd 起这些 interface 之前做完（netifd 是按 rndis-modemN
+	# 这个稳定名去找网卡的），所以放在这个 init 里（START=18）。
+	# ★ 2026-09-20 起这里【只做重命名】—— APN 激活已挪到 mifi-rndis-activate.sh
+	#   后台跑（见本文件末尾）。原来整段都在这里同步执行，实测要 132 秒
+	#   （两个模组各 4 个 APN 候选 × 14 秒、全失败），把 WiFi 堵到了内核 185 秒。
+	if [ "$link1" = "rndis" ] || [ "$link2" = "rndis" ]; then
+		[ "$link1" = "rndis" ] && /usr/libexec/mifi-rndis.sh modem1
+		[ "$link2" = "rndis" ] && /usr/libexec/mifi-rndis.sh modem2
+	fi
+
+	# ---- modem1 ------------------------------------------------------------
+	if [ "$link1" = "ppp" ] && [ -n "$port1" ]; then
+		uci -q set network.modem1.proto='ppp'
+		uci -q set network.modem1.device="/dev/$port1"
+		uci -q set network.modem1.connect='/usr/libexec/mifi-dial.sh modem1'
+		uci -q set network.modem1.disconnect='/usr/sbin/chat -t 15 -s -f /etc/chatscripts/mifi-disconnect'
+		uci -q set network.modem1.keepalive='10 3'
+		uci -q set network.modem1.pppd_options='noauth nocrtscts noipdefault novj novjccomp noccp ipcp-accept-local ipcp-accept-remote'
+		uci -q set network.modem1.peerdns='1'
+		uci -q delete network.modem1.ipaddr
+		uci -q delete network.modem1.gateway
+	else
+		uci -q set network.modem1.proto='static'
+		uci -q set network.modem1.device="$(rndis_dev modem1)"
+		uci -q set network.modem1.ipaddr="$(rndis_ip modem1)"
+		uci -q set network.modem1.netmask='255.255.255.0'
+		uci -q set network.modem1.gateway='192.168.43.1'
+		# RNDIS 下 DNS 由模组透传，但直接写死更可靠（阿里/腾讯公共 DNS）
+		uci -q set network.modem1.dns='223.5.5.5 119.29.29.29'
+		uci -q set network.modem1.peerdns='0'
+		uci -q delete network.modem1.keepalive
+		uci -q delete network.modem1.pppd_options
+	fi
+
+	# ---- modem2 ------------------------------------------------------------
+	if [ "$link2" = "ppp" ] && [ -n "$port2" ]; then
+		uci -q set network.modem2.proto='ppp'
+		uci -q set network.modem2.device="/dev/$port2"
+		uci -q set network.modem2.connect='/usr/libexec/mifi-dial.sh modem2'
+		uci -q set network.modem2.disconnect='/usr/sbin/chat -t 15 -s -f /etc/chatscripts/mifi-disconnect'
+		uci -q set network.modem2.keepalive='10 3'
+		uci -q set network.modem2.pppd_options='noauth nocrtscts noipdefault novj novjccomp noccp ipcp-accept-local ipcp-accept-remote'
+		uci -q set network.modem2.peerdns='1'
+		uci -q delete network.modem2.ipaddr
+		uci -q delete network.modem2.gateway
+	else
+		uci -q set network.modem2.proto='static'
+		uci -q set network.modem2.device="$(rndis_dev modem2)"
+		uci -q set network.modem2.ipaddr="$(rndis_ip modem2)"
+		uci -q set network.modem2.netmask='255.255.255.0'
+		uci -q set network.modem2.gateway='192.168.43.1'
+		uci -q set network.modem2.dns='223.5.5.5 119.29.29.29'
+		uci -q set network.modem2.peerdns='0'
+		uci -q delete network.modem2.keepalive
+		uci -q delete network.modem2.pppd_options
+	fi
+
+	uci -q commit network
+
+	# 若 netifd 已在运行（例如手工重跑本脚本），让它重读配置
+	ubus call network reload >/dev/null 2>&1
+
+	# ---- ★★ 后台段：RNDIS 数据面激活（2026-09-20 方案 A）-------------------
+	# APN 激活是最慢的一段（每个模组最多 60 秒），而且【慢得毫无意义】——
+	# 卡被拒注册时 4 个 APN 候选必然全失败，但照样要白等满。
+	# 所以绝对不能在这里同步等它，否则 S19*/S20network（WiFi bring-up）全被堵住。
+	#
+	# 为什么可以不等：netifd 起 rndis-modemN 只需要「网卡存在 + uci 里有地址」，
+	# 这两件事上面都已经做完了。数据面晚通一会儿没关系 —— mwan3track 会周期性
+	# 探测（interval=20s），通了自然转 online。
+	#
+	# ★ 用 `&` 让进程脱离本脚本：本脚本退出后它成为孤儿进程，被 procd(pid 1)
+	#   收养并继续跑完，不会被杀（本脚本没有 USE_PROCD，procd 不管理它的子进程）。
+	# ★ 两个模组【并发】跑：各自用不同 AT 口（1-1.1:1.4 / 1-1.2:1.4），不冲突；
+	#   并发后最坏耗时从 60+60 降到 60 秒。
+	# ★ 输出重定向到 /dev/null：进度全部走 logger（tag = mifi-rndis-act），不丢日志。
+	if [ "$link1" = "rndis" ]; then
+		/usr/libexec/mifi-rndis-activate.sh modem1 >/dev/null 2>&1 &
+	fi
+	if [ "$link2" = "rndis" ]; then
+		/usr/libexec/mifi-rndis-activate.sh modem2 >/dev/null 2>&1 &
+	fi
+}
