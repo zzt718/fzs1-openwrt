@@ -1,0 +1,142 @@
+#!/bin/sh
+# MIBOX-668M2 first-boot defaults
+
+# --- WiFi ---
+# 以下每一项都显式写入，不依赖目标默认值 —— 这组值就是 2026-09-18
+# 在真机上验证可用的配置（手机 iQOO-Neo9 能搜到、能关联）。
+#
+# ★★ 速率：为什么必须是 HT40 + noscan=1（否则只能跑到 144 Mbps）
+#
+#   [1] 本板是双流。mt7603/eeprom.c 会读 EEPROM 的 MT_EE_NIC_CONF_0
+#       RX_PATH/TX_PATH 字段决定 antenna_mask（3=双流 / 1=单流）；
+#       本机实测 `iw phy phy0 info` → "Available Antennas: TX 0x3 RX 0x3"
+#       + "HT TX/RX MCS rate indexes supported: 0-15" → 确认 2T2R。
+#       对应板上两个 RTC7662 前端模块各带一条链路。
+#       → 2SS 链路速率：HT20 SGI = 144 Mbps，HT40 SGI = 300 Mbps。
+#         所以"想要 300"等价于"必须让 40MHz 真正生效"。
+#
+#   [2] 但 hostapd 默认会做 2.4G 的 40MHz 共存检查
+#       (src/ap/hw_features.c: ieee80211n_check_40mhz_2g4)：
+#       检查窗口 = 40MHz 块中心 ±25MHz，共 50MHz；窗口内扫到任何其他 BSS 就回退 20MHz。
+#       实测本机周围：ch1 有 4 个 AP(-64~-72dBm)、ch11 有 2 个 AP(-69dBm)、ch13 干净。
+#       ch1 与 ch11 相距正好 50MHz → 【不存在任何 40MHz 块能同时避开 ch1 和 ch11】，
+#       所以默认配置下 HT40 在信道 1~13 上会被【无条件】拒绝，跟选哪个信道无关。
+#       日志特征：COUNTRY_UPDATE->HT_SCAN -> "20/40 MHz operation not permitted
+#       on channel pri=13 sec=9 based on overlapping BSSes" -> "Fallback to 20 MHz"。
+#
+#   [3] 解法 = noscan=1。它是 OpenWrt 的 wifi-device 选项
+#       (mac80211.sh: config_add_boolean noscan)，最终写成 hostapd 的 noscan=1。
+#       OpenWrt 的 300-noscan.patch 让 ieee80211n_check_40mhz() 直接 return 0，
+#       彻底跳过共存扫描 → 不再回退。
+#       验证：hostapd 日志变成 COUNTRY_UPDATE->ENABLED（HT_SCAN 消失），
+#             iwinfo 显示 HT Mode: HT40，Center Channel 1: 11。
+#
+#   [4] 代价（知情选择）：本机 40MHz 块 = **2442~2482 MHz**
+#       （`iw dev wlan0 info` 实测：channel 13 (2472), width 40 MHz, center1 2462
+#         → 占用 2462±20 = 2442~2482）。
+#       而 ch11 邻居占 2452~2472 → **被完整包在里面**，属于"抢频谱"。
+#       注：ch13 的 HT40- 次信道只能是 ch9，块中心必然落在 2462（= ch11 中心），
+#       无法平移；想要更小的重叠只能换主信道（如 ch6 HT40+ → 2427~2467）。
+#       若日后发现实际吞吐反而下降（2.4G 拥挤时 40MHz 可能因碰撞不如 20MHz），
+#       把 htmode 改回 HT20 即可（144 Mbps 但更干净）：
+#           uci set wireless.radio0.htmode='HT20'; uci commit wireless; wifi reload
+wifi config >/dev/null 2>&1
+if uci -q get wireless.radio0 >/dev/null 2>&1; then
+	uci -q set wireless.radio0.disabled='0'
+	uci -q set wireless.radio0.country='CN'
+	uci -q set wireless.radio0.channel='13'
+	uci -q set wireless.radio0.htmode='HT40'
+	uci -q set wireless.radio0.noscan='1'
+	uci -q set wireless.radio0.txpower='20'
+	uci -q set wireless.radio0.cell_density='1'
+	uci -q set wireless.radio0.legacy_rates='1'
+	uci -q set wireless.radio0.supported_rates='1000 2000 5500 11000 6000 9000 12000 18000 24000 36000 48000 54000'
+	uci -q set wireless.radio0.basic_rate='1000 2000 5500 11000'
+	uci -q set wireless.default_radio0.ssid='FZS-S1'
+	uci -q set wireless.default_radio0.encryption='psk2'
+	uci -q set wireless.default_radio0.key='1234567890'
+	uci -q commit wireless
+fi
+
+# --- dual 4G links（当前走原生 RNDIS）--------------------------------------
+# ★ 通路选择由 /etc/config/mifi 的 option link 决定，默认 'rndis'。
+#   /etc/init.d/mifi-modem（START=18，在 network 之前）每次开机都会：
+#     1) 按 USB 路径解析端口（ttyUSB/usbN 编号每次上电都可能变）；
+#     2) link=rndis 时调 /usr/libexec/mifi-rndis.sh 激活 RNDIS 数据通路、
+#        把网卡重命名成 rndis-modem1/2，并把 network.modemN 写成
+#        proto static + 固定 IP + 网关 192.168.43.1；
+#     3) link=ppp 时写回 proto ppp + /dev/ttyUSBn（即原方案）。
+#   所以这里只写"首启默认值"，真正生效的是 init 脚本写的那份。
+#
+# ★ 为什么 RNDIS 必须手工指定 IP：两个模组的 RNDIS 网关都是 192.168.43.1、
+#   内置 DHCP 都下发 192.168.43.100 → 双口都走 DHCP 会撞成同一个地址。
+#   故 modem1=192.168.43.2 / modem2=192.168.43.3。
+#   ★ 这两个值取自厂商原固件二进制里的字符串（192.168.43.1/.2/.3），
+#     且在模组 DHCP 池之外，不会和 DHCP 租约撞。
+#
+# ★ 注意：RNDIS 下【不能】靠 main 表的默认路由 —— 两个模组网关是同一个
+#   IP，IPv4 里 default 的路由键不含 dev，同 metric 的第二条会 File exists。
+#   解决办法见 /etc/hotplug.d/iface/14-mifi-route（用不同 metric 把两条
+#   默认路由都放进 main，mwan3 才能按 dev 分发到表 1/表 2）。
+uci -q set network.modem1=interface
+uci -q set network.modem1.proto='static'
+uci -q set network.modem1.device='rndis-modem1'
+uci -q set network.modem1.ipaddr='192.168.43.2'
+uci -q set network.modem1.netmask='255.255.255.0'
+uci -q set network.modem1.gateway='192.168.43.1'
+uci -q set network.modem1.dns='223.5.5.5 119.29.29.29'
+uci -q set network.modem1.peerdns='0'
+uci -q set network.modem1.ipv6='0'
+
+uci -q set network.modem2=interface
+uci -q set network.modem2.proto='static'
+uci -q set network.modem2.device='rndis-modem2'
+uci -q set network.modem2.ipaddr='192.168.43.3'
+uci -q set network.modem2.netmask='255.255.255.0'
+uci -q set network.modem2.gateway='192.168.43.1'
+uci -q set network.modem2.dns='223.5.5.5 119.29.29.29'
+uci -q set network.modem2.peerdns='0'
+uci -q set network.modem2.ipv6='0'
+
+# 若要切回 PPP（原方案），把下面两行的注释去掉、并删掉上面两段 static 配置，
+# 或更简单地直接改 /etc/config/mifi：uci set mifi.modem1.link='ppp'
+# （mifi-modem 会在下次启动时把 network.modemN 改回 proto ppp）。
+#
+# PPP 方案下的注意点（保留备查）：
+# 注意：disconnect 里【不要】加 chat 的 -v —— 那会把每条 AT 收发都写进 syslog，
+# 是"没插卡时日志刷屏"的最大来源。拨号节流见 /usr/libexec/mifi-dial.sh。
+
+uci -q commit network
+
+/etc/init.d/mifi-modem enable >/dev/null 2>&1
+
+
+# --- firewall：两个 ppp 口必须纳入 wan 区 -----------------------------------
+# 2026-09-18 实测根因：firewall 默认 wan 区只含 'wan' 'wan6'（即 eth0.2），
+# ppp-modem1 / ppp-modem2 不属于任何 zone。后果两条，都是致命的：
+#   [1] fw4 只为 zone 内的设备生成 masquerade
+#       （chain srcnat: `oifname { "eth0.2" } jump srcnat_wan`）
+#       → LAN 侧流量出 ppp 时不做 NAT，源地址是 192.168.1.x，被运营商丢弃；
+#   [2] chain accept_to_wan 同样只匹配 oifname "eth0.2"
+#       → forward_lan 转发到 ppp 的包落到 handle_reject，被直接 REJECT。
+# 现象指纹（一眼可辨）：
+#   路由器自己 `ping -I ppp-modem1 223.5.5.5` 通（源地址就是 ppp 地址，无需 NAT），
+#   但 `ping -I 192.168.1.1 223.5.5.5` 100% 丢包（源地址是私网，没被 NAT）。
+# 与 SIM 卡无关：当时两张卡都 +CPIN: READY、注册上 LTE、PDP 已激活、都拿到 10.x 地址。
+# 按 name 查找而不是硬编码 @zone[1]，避免将来 zone 顺序变化改错位置。
+__fwi=0
+while uci -q get "firewall.@zone[$__fwi]" >/dev/null 2>&1; do
+	if [ "$(uci -q get "firewall.@zone[$__fwi].name")" = "wan" ]; then
+		for __m in modem1 modem2; do
+			uci -q del_list "firewall.@zone[$__fwi].network=$__m"
+			uci -q add_list "firewall.@zone[$__fwi].network=$__m"
+		done
+	fi
+	__fwi=$((__fwi + 1))
+done
+uci -q commit firewall
+# --- apply new config ---
+wifi up >/dev/null 2>&1
+ubus call network reload >/dev/null 2>&1
+
+exit 0
