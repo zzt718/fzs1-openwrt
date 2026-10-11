@@ -1,0 +1,83 @@
+#!/bin/sh
+# ============================================================
+# 99-fzs-branding —— 蜂助手 S1 固件品牌化 + 默认配置
+# 在 95-mibox-setup 之后运行（按文件名排序）
+# ============================================================
+
+# ---- 1. 默认 root 密码 = admin ----
+# admin 的 MD5-crypt hash（openssl passwd -1 -salt fzsadmin admin 生成，已校验）
+# 只有当 root 仍是空密码时才设置，避免覆盖用户已改的密码
+if [ -f /etc/shadow ]; then
+	if grep -q '^root::' /etc/shadow 2>/dev/null; then
+		sed -i 's|^root::|root:$1$fzsadmin$VVWRjbv3PHQ7cvwUsrNqc.:|' /etc/shadow
+	fi
+fi
+
+# ---- 2. Argon 主题设为默认 + 亮色 + 内置背景（不用每日在线壁纸）----
+uci -q set luci.main.mediaurlbase='/luci-static/argon'
+uci -q set luci.main.lang='zh_cn'
+
+# Argon 全局配置
+uci -q set argon.@global[0]='global' 2>/dev/null || uci -q add argon global >/dev/null 2>&1
+uci -q set argon.@global[0].mode='light'
+# 背景：'none' = 用主题自带的内置图（/luci-static/argon/img/bg1.jpg），不联网抓图。
+# 原值 'bing' 每日必应图需设备侧 rpcd（luci.argon_wallpaper）用 wget 抓
+#   https://www.bing.com/HPImageArchive.aspx —— 那是 wget-ssl/OpenSSL 的依赖锚之一。
+# 关闭后主题外观照常：sysauth.ut 默认即本地 bg1.jpg，且 <img onerror> 也回退它。
+uci -q set argon.@global[0].online_wallpaper='none'
+uci -q set argon.@global[0].bing_background='0'
+# 主色 = Argon 标志蓝（默认是 #212121 深灰，看起来发黑）
+uci -q set argon.@global[0].primary='#5e72e4'
+uci -q set argon.@global[0].dark_primary='#483d8b'
+uci -q set argon.@global[0].blur='10'
+uci -q set argon.@global[0].blur_dark='10'
+uci -q set argon.@global[0].transparency='0.5'
+uci -q set argon.@global[0].transparency_dark='0.5'
+uci -q commit argon 2>/dev/null
+
+# ---- 3. ttyd 配置预置（供用户后装 ttyd 时直接可用；固件不预装 ttyd）----
+# 背景：v4 起不再预装 ttyd/luci-app-ttyd（省 ≈0.46MiB + 切断 libopenssl）。
+#       但这里仍把 /etc/config/ttyd 的正确值写好 —— 该文件是 opkg conffile，
+#       用户日后从「系统→软件包」装 ttyd 时会被保留，于是开箱就能用、不用再踩坑。
+# 注意：interface 必须写成 '@lan'（带 @ 前缀），ttyd init 才会用
+#       network_get_device 解析成真实设备 br-lan；写成裸 'lan' 会绑不上
+#       → lws 报 iface DOESN'T EXIST → 端口不监听 → 浏览器"拒绝连接"。
+#       command 用 '/bin/login'（需输密码）；写成 '/bin/login -f root' 会免密直进 root（不安全）。
+uci -q set ttyd.@ttyd[0]='ttyd'
+uci -q set ttyd.@ttyd[0].command='/bin/login'
+uci -q set ttyd.@ttyd[0].interface='@lan'
+uci -q set ttyd.@ttyd[0].port='7681'
+uci -q set ttyd.@ttyd[0].username='' 2>/dev/null
+uci -q commit ttyd 2>/dev/null
+
+# ---- 4. 启用 mwan3（双模组负载均衡，开机自启）----
+/etc/init.d/mwan3 enable 2>/dev/null
+# 若 modem1/modem2 接口尚未生成（首启 mifi-rndis 还没跑完），mwan3 会留空等下次；
+# 这里只确保服务启用，配置来自 /etc/config/mwan3（固件内置）
+
+# ---- 4.5 摘除 LuCI 首页底部的 mwan3 部件（消除负载尖峰）----
+# 机制：LuCI 首页 /www/luci-static/resources/view/status/index.js 的 load() 只做
+#      "扫 include 目录里的 *.js 并逐个 require"，【没有 per-widget 开关】。
+#      该部件每 5s 调一次 `ubus call mwan3 status`（后端 /usr/libexec/rpcd/mwan3
+#      单次 fork 100+ 进程），在 575MHz 单核上会把 1min 负载顶到 ~2（观察者效应）。
+#      面板已有双模组状态，此块冗余。给文件换后缀 → fs.list 过滤 .js 时不收它 →
+#      首页不再轮询。mwan3 功能/配置页/状态页/Kconfig 全部不受影响（实测负载 1.78→0.03）。
+_mwan3_inc='/www/luci-static/resources/view/status/include/90_mwan3.js'
+[ -f "$_mwan3_inc" ] && mv "$_mwan3_inc" "${_mwan3_inc}.disabled"
+
+# ---- 4.6 纠正 i2c-tools 的 opkg 标记（防它被当作孤儿自动删除）----
+# 背景（2026-10-11 交付级 bug）：i2c-tools 提供的 i2ctransfer 是 mifi-modem 给
+#   I2C@0x39 上电的【唯一】工具，两个模组的供电/4G/短信全依赖它。
+#   若它在 opkg status 里被标为 'Auto-Installed: yes'（历史上因 luci-app-fzs 的
+#   DEPENDS 带 '+' 而被标 auto），则任何 opkg 升级/安装（如升级面板 ipk）都可能
+#   把它当孤儿清掉 → /usr/sbin/i2ctransfer 消失 → 模组全哑。
+#   这里在首启把它纠正为手动安装（从 status 中删掉 Auto-Installed 行），
+#   与 luci-app-fzs.Makefile 去掉 '+' 的改动构成双保险。
+if [ -f /usr/lib/opkg/status ]; then
+	sed -i '/^Package: i2c-tools$/,/^$/{/^Auto-Installed: yes$/d}' /usr/lib/opkg/status 2>/dev/null
+fi
+
+# ---- 5. 首次启动标记 ----
+echo "fzs1 branding applied" > /etc/fzs-version 2>/dev/null
+
+exit 0
