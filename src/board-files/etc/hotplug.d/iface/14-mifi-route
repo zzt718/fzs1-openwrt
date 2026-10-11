@@ -1,0 +1,89 @@
+#!/bin/sh
+# MIBOX-668M2 / RNDIS 双模组：让 mwan3 能拿到「每个模组各一条默认路由」
+#
+# ===== 为什么需要这个脚本（2026-09-18 实测根因）=====
+# 两个 EC200 模组的 RNDIS 网关【是同一个 IP】192.168.43.1，而 IPv4 的路由表
+# 里 default 的路由键是 (前缀, tos, metric) —— 不含 dev。所以：
+#     ip route add default via 192.168.43.1 dev rndis-modem1
+#     ip route add default via 192.168.43.1 dev rndis-modem2
+# 第二条会直接 RTNETLINK answers: File exists（实测）。
+# 结果 main 表里只剩一条默认路由（谁后配谁赢，还会来回抢）。
+#
+# 而 mwan3 分发路由的逻辑是 mwan3_create_iface_route()：
+#     读 main 表 → 按 "dev X" 反查属于哪个 mwan3 接口 → 复制进该接口的表
+#     （default 路由只在 tid == 自己的 id 时才复制）
+# main 里没有 "dev rndis-modem1" 的 default ⇒ 表 1 永远空
+# ⇒ mwan3 判 modem1 `error (16)`（16 = 它的第 5 项检查：
+#    ip route list table 1 default dev rndis-modem1 为空）
+# ⇒ mwan3 撤掉表 1 的默认路由 + ip rule 3001 unreachable
+# ⇒ 被 mwan3 打标 0x100 的流量（约一半的 LAN 流量）报 Network unreachable
+#
+# 解法：用【不同 metric】把两条默认路由都放进 main —— 不同 metric 是不同的
+# 路由键，内核允许共存（实测 rc=0）。这样 mwan3 就能按 dev 各取一条，
+# 而且在 mwan3 restart（会 flush 表 1/2）之后还能从 main 重新恢复。
+#
+# ★ 本脚本必须在 15-mwan3 之前执行（文件名 14- 保证字典序在前），
+#   否则 mwan3 的 ifup 处理函数读 main 时还看不到这两条路由。
+#
+# ★ 为什么不用 option ip4table：
+#   ip4table 确实能让 netifd 把默认路由直接写进表 1/2（mwan3 立刻 online），
+#   但 mwan3 restart 会 flush 表 1/2，而它只能从 main 恢复 —— main 里没有
+#   对应 dev 的默认路由，于是表 1/2 又变空、又回到 error (16)（实测）。
+#   两者可以叠加，但单靠本脚本已经够，保持简单。
+#
+# ★ 为什么不用 option metric：
+#   本固件的 netifd（22.03.7）里根本没有 "metric" 这个选项名（strings 实测），
+#   接口级和 route 段的 metric 都被忽略。
+#
+# ★ 为什么不用 route 段的 option table：
+#   netifd 认得 "table" 这个字符串，但实测 route 段写到 table 100/101 不生效
+#   （两张表都是空的）。所以改用 hotplug。
+
+[ "$ACTION" = "ifup" ] || exit 0
+
+case "$INTERFACE" in
+modem1) dev=rndis-modem1; metric=10 ;;
+modem2) dev=rndis-modem2; metric=20 ;;
+*) exit 0 ;;
+esac
+
+# 网卡还没就绪就等一会（mifi-modem 会重命名网卡，理论上此时已完成）
+i=0
+while [ ! -d "/sys/class/net/$dev" ] && [ "$i" -lt 10 ]; do
+	sleep 1
+	i=$((i + 1))
+done
+[ -d "/sys/class/net/$dev" ] || {
+	logger -t mifi-route "WARN: $dev 不存在，跳过默认路由"
+	exit 0
+}
+
+gw=$(uci -q get "network.$INTERFACE.gateway")
+[ -n "$gw" ] || gw=192.168.43.1
+
+# ★★ 2026-09-18 刷后实测踩到的两个坑 —— 下面两段的写法和顺序都不能改 ★★
+#
+# 【坑 1】netifd 给每个 static 接口都加一条【无 metric】的 default，但两个口网关
+#   同为 192.168.43.1 ⇒ 内核只允许存在一条 ⇒ 谁后 ifup 谁留下。实测刷机后这条
+#   指向【没有 PDP 的 modem2】→ `ip route get 223.5.5.5` 返回 dev rndis-modem2
+#   → 未打标流量（mwan3 收敛前的窗口期等）100% 丢包。所以必须删掉它。
+#
+#   ★ 删除时【只能按 dev 过滤】，绝不能写 "metric 0"：
+#     `ip route del default via X metric 0` 里的 metric 0 会被 iproute2 当成
+#     "未指定"，于是删掉【任意 metric】的匹配路由 —— 实测它会把另一个接口的
+#     metric 10/20 一起删掉（两个 hotplug 互相拆台，main 表永远只剩一条，
+#     而且留下的是后执行的那个 → 可能正好是没 PDP 的口）。
+#     `ip route del default via X dev Y`（dev 过滤）实测精确，不影响另一个口。
+#   用 while 是因为本口可能同时存在 netifd 的 metric0 和上次加的 metric N。
+#
+# 【坑 2】加路由【必须用 add，不能用 replace】：
+#   `ip route replace default via X dev Y metric N` 实测会把另一条（不同 metric）
+#   直接替换掉，两条无法共存。`ip route add` 才能共存（不同 metric = 不同 fib 键）。
+while ip route show table main | grep "^default" | grep -qF "dev $dev"; do
+	ip route del default via "$gw" dev "$dev" 2>/dev/null || break
+done
+ip route add default via "$gw" dev "$dev" metric "$metric" 2>/dev/null
+
+logger -t mifi-route "ifup $INTERFACE -> default via $gw dev $dev metric $metric (已清本口旧 default)"
+
+exit 0
