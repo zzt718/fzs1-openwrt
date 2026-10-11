@@ -17,13 +17,17 @@ OpenWrt 23.05 (ramips/mt76x8), dual-modem RNDIS, `mwan3`, LuCI, SMS forwarding.
 
 ---
 
-**Screenshots**:
+## Screenshots
 
-| OpenWrt status page | FZS panel overview |
-|---|---|
-| ![Status page](images/status.jpg) | ![Panel overview](images/panel-overview.jpg) |
+**OpenWrt status page** (firmware info / memory / storage):
 
-> Left: firmware running on MIBOX-668M2 (kernel 5.15.167). Right: built-in Chinese panel — both modems' signal / operator / band / cell at a glance, with all feature entries.
+![OpenWrt status page](images/status.jpg)
+
+**FZS panel · Overview** (dual-modem status + feature entries, built-in LuCI panel):
+
+![FZS panel overview](images/panel-overview.jpg)
+
+> Both modems' signal / operator / band / cell at a glance; entries for network setup, band lock, cell lock, IMEI, APN, SMS center, and more.
 
 ---
 
