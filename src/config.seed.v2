@@ -1,0 +1,121 @@
+# ============================================================
+# 蜂助手 S1 (MIBOX-668M2) OpenWrt 固件配置种子 —— 定稿
+# 基于 OpenWrt 23.05.5 / ramips / mt76x8（内核 5.15）
+# 用法：cp config.seed.v2 <openwrt>/.config && make defconfig
+# ============================================================
+
+# ---- 目标平台与设备 ----
+CONFIG_TARGET_ramips=y
+CONFIG_TARGET_ramips_mt76x8=y
+CONFIG_TARGET_ramips_mt76x8_DEVICE_mibox_668m2=y
+
+# ---- 必备：LuCI 后端（修 LuCI 挂起）----
+CONFIG_PACKAGE_uhttpd=y
+CONFIG_PACKAGE_uhttpd-mod-ucode=y
+CONFIG_PACKAGE_uhttpd-mod-ubus=y
+
+# ---- LuCI 核心 + 中文 ----
+CONFIG_PACKAGE_luci=y
+CONFIG_PACKAGE_luci-base=y
+CONFIG_PACKAGE_luci-light=y
+# ★ 全局中文语言开关（自动为所有 LuCI 组件生成 zh-cn 翻译包）
+CONFIG_LUCI_LANG_zh_Hans=y
+
+# ---- 网页终端 ttyd：不预装（用户可在「系统→软件包」按需安装 luci-app-ttyd）----
+# 不预装的理由：① 体积（ttyd 链 ≈0.46MiB）；② 它是 libwebsockets-full→libopenssl 的锚。
+# 注意：99-fzs-branding 仍会预置 /etc/config/ttyd 的正确值（interface='@lan'、
+#       command='/bin/login'）—— 该文件是 conffile，用户后装 ttyd 时会被保留，
+#       于是后装的 ttyd 开箱就能绑上、且要密码，不会踩"拒绝连接/免密"的坑。
+# CONFIG_PACKAGE_ttyd is not set
+# CONFIG_PACKAGE_luci-app-ttyd is not set
+
+# ---- Argon 主题 + 配置插件 ----
+CONFIG_PACKAGE_luci-theme-argon=y
+CONFIG_PACKAGE_luci-app-argon-config=y
+
+# ---- 保留 bootstrap 主题（可切换）----
+CONFIG_PACKAGE_luci-theme-bootstrap=y
+
+# ---- 不预装 wget-ssl；只留 jsonfilter（base-files 依赖，常驻）----
+# 不选 wget-ssl 的三条理由：
+#   ① 固件内唯一真实消费者原是 luci-theme-argon 的在线壁纸 rpcd
+#      （/usr/libexec/rpcd/luci.argon_wallpaper）—— 已在 99-fzs-branding 关闭
+#      （online_wallpaper='none'）；主题 Makefile 亦已 patch 掉 wget 依赖。
+#   ② 面板短信转发（fzs-fwd）本就"按需降级"：无 GNU wget 时退回 uclient-fetch
+#      （Content-Type 非 JSON，部分渠道拒收），前端仅在用户勾了需 JSON 的渠道时
+#      提示去「系统→软件包」装 wget-ssl。
+#   ③ 去掉它，libopenssl(≈1.05MiB) 才彻底退出固件。
+# ★ 切勿改选 wget-nossl：它没有 https，会让 fzs-fwd 的 `command -v wget` 检测通过、
+#   但 webhook 静默发不出去（前端也不会再提示补装），比不装更糟。
+# CONFIG_PACKAGE_wget-ssl is not set
+# CONFIG_PACKAGE_wget-nossl is not set
+CONFIG_PACKAGE_jsonfilter=y
+
+# ---- 压住历史遗留的显式选中（会牵回 openssl/libwebsockets）----
+# CONFIG_PACKAGE_libwebsockets-full is not set
+# CONFIG_PACKAGE_libwebsockets-openssl is not set
+# CONFIG_PACKAGE_dbus is not set
+
+# ---- 我们的面板 fzs ----
+CONFIG_PACKAGE_luci-app-fzs=y
+
+# ---- 包管理器（网页装 ipk）----
+CONFIG_PACKAGE_luci-app-package-manager=y
+
+# ---- 双模组 4G 上网（mwan3 多路复用）----
+CONFIG_PACKAGE_mwan3=y
+CONFIG_PACKAGE_luci-app-mwan3=y
+CONFIG_PACKAGE_luci-proto-ppp=y
+CONFIG_PACKAGE_ppp=y
+CONFIG_PACKAGE_ppp-mod-pppoe=y
+CONFIG_PACKAGE_chat=y
+CONFIG_PACKAGE_comgt-ncm=y
+
+# ---- 4G 模组串口 / RNDIS ----
+CONFIG_PACKAGE_kmod-usb-core=y
+CONFIG_PACKAGE_kmod-usb2=y
+CONFIG_PACKAGE_kmod-usb-ehci=y
+CONFIG_PACKAGE_kmod-usb-ohci=y
+CONFIG_PACKAGE_kmod-usb-net=y
+CONFIG_PACKAGE_kmod-usb-net-rndis=y
+CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y
+CONFIG_PACKAGE_kmod-usb-serial=y
+CONFIG_PACKAGE_kmod-usb-serial-option=y
+CONFIG_PACKAGE_kmod-usb-serial-wwan=y
+
+# ---- USB 扩展（用户自焊 USB 口：随身WiFi/手机/U盘）----
+CONFIG_PACKAGE_kmod-usb-storage=y
+CONFIG_PACKAGE_kmod-usb-storage-uas=y
+CONFIG_PACKAGE_kmod-usb-net-cdc-ncm=y
+CONFIG_PACKAGE_kmod-usb-net-sr9700=y
+CONFIG_PACKAGE_kmod-fs-ext4=y
+CONFIG_PACKAGE_kmod-fs-vfat=y
+CONFIG_PACKAGE_kmod-fs-exfat=y
+CONFIG_PACKAGE_kmod-fs-ntfs=y
+CONFIG_PACKAGE_usbutils=y
+CONFIG_PACKAGE_libusb-1.0=y
+
+# ---- i2c（模组上电必需）----
+CONFIG_PACKAGE_kmod-i2c-core=y
+CONFIG_PACKAGE_kmod-i2c-mt7628=y
+CONFIG_PACKAGE_i2c-tools=y
+CONFIG_PACKAGE_libi2c=y
+
+# ---- WiFi（2.4G）----
+CONFIG_PACKAGE_wpad-basic-mbedtls=y
+CONFIG_PACKAGE_kmod-mt76=y
+
+# ---- 安全增强 ----
+CONFIG_PACKAGE_procd-ujail=y
+
+# ---- microcom（人工 AT 调试）----
+CONFIG_BUSYBOX_CONFIG_MICROCOM=y
+
+# ---- 基础 4G/LTE 协议支持 ----
+# 注意：modemmanager 已于 24.10 瘦身时移除（走 RNDIS 完全不需要，且拉入
+# glib2(2.5MB)/python3/libqmi/libmbim/libqrtr-glib/bluez 一条重链）。
+# 23.05 严格对齐 24.10，不选它。qmi 编解码由面板自带的 ATo 引擎直接处理。
+# CONFIG_PACKAGE_luci-proto-modemmanager is not set
+
+# ---- 防火墙 ----
+CONFIG_PACKAGE_luci-app-firewall=y
