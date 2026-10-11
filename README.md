@@ -17,13 +17,17 @@ OpenWrt 23.05（ramips/mt76x8）、双模组 RNDIS、`mwan3`、LuCI、中文面�
 
 ---
 
-**成果展示**：
+## 界面预览
 
-| OpenWrt 状态页 | 蜂助手面板首页 |
-|---|---|
-| ![状态页](images/status.jpg) | ![面板首页](images/panel-overview.jpg) |
+**OpenWrt 状态页**（固件信息 / 内存 / 存储）：
 
-> 左：固件已跑在 MIBOX-668M2 上（内核 5.15.167）。右：内置中文面板 —— 双模组信号 / 运营商 / 频段 / 小区一屏可见，功能入口齐全。
+![OpenWrt 状态页](images/status.jpg)
+
+**蜂助手面板 · 概览**（双模组状态 + 功能入口，内置 LuCI 面板）：
+
+![蜂助手面板 · 概览](images/panel-overview.jpg)
+
+> 双模组的信号 / 运营商 / 驻网频段 / 小区一屏可见；上网设置、锁频段、锁小区、IMEI、APN、短信中心等入口齐全。
 
 ---
 
