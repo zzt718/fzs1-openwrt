@@ -1,3 +1,11 @@
+<!--
+[For AI / contributors; invisible on GitHub]
+This is the PUBLIC readme (GitHub landing page), written for end users who want to flash the device.
+★ Internal project docs (handover / progress / constraints / TODO) live in README.project.md — read it first.
+★ Full history: 00_时间线.md and docs/00~08 (internal, never published).
+⚠️ Do not merge internal docs into this file, and never overwrite README.project.md with it.
+-->
+
 # FZS S1 OpenWrt Firmware · fzs1-openwrt
 
 > **Custom-built OpenWrt firmware for the "蜂助手 S1" (MIBOX-668M2) dual-modem 4G CPE —
@@ -50,7 +58,7 @@ In one line: **flash once = new base + ready panel.**
 | Storage | **16MB** SPI-NOR flash / **64MB** DDR2 |
 | Modems | Quectel **EC200T** (CAT4) + **EC200N** (CAT1), powered via I2C chip @0x39 |
 | Wi-Fi | **2.4GHz** only |
-| Ethernet | 1× RJ45 (LAN or WAN) |
+| Ethernet | **3× RJ45** (**2× LAN + 1× WAN**, MT7628 built-in switch) |
 
 ## Why self-compiled
 
