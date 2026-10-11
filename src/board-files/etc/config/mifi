@@ -1,0 +1,67 @@
+config modem 'modem1'
+	option apn 'auto'
+	option dial '*99#'
+	option retry_delay '60'
+	option link 'rndis'
+
+config modem 'modem2'
+	option apn 'auto'
+	option dial '*99#'
+	option retry_delay '60'
+	option link 'rndis'
+
+# --- option link：数据通路二选一 --------------------------------------------
+#   'rndis'（当前默认）= 模组原生 RNDIS（usbnet 模式 3）。
+#       由 /usr/libexec/mifi-rndis.sh 拉起，/etc/init.d/mifi-modem 在每次开机
+#       把它写进 network.modemN（proto static + rndis-modemN + 192.168.43.2/.3）。
+#       ★ 两个模组的 RNDIS 网关都是 192.168.43.1、DHCP 都下发 .100，
+#         所以【主机地址必须手工错开】：modem1=.2 / modem2=.3
+#         （取自厂商原固件里的字符串，且在模组 DHCP 池之外）。
+#       ★ RNDIS 网卡名由内核按枚举顺序分配（usb0/usb1）且会漂移，
+#         脚本按 USB 路径（1-1.1/1-1.2）重命名成 rndis-modem1/2 固定下来。
+#   'ppp'              = 原路 PPP over USB-serial（pppd + chat + mifi-dial.sh）。
+#       切换只需：uci set mifi.modem1.link='ppp'; uci commit mifi
+#                 然后 reboot（或 /etc/init.d/mifi-modem restart）。
+#       两条通路互不影响，随时可切回。
+
+# --- APN 说明 ---------------------------------------------------------------
+# option apn 'auto' = 依次尝试 cmiot -> cmnet -> 3gnet -> ctnet，谁成功就固定用谁。
+#                     轮转状态放在 /tmp，重启后重新探测。
+# 也可以直接写死（推荐插卡确认运营商后写死，省掉最多 7 分钟的探测时间）：
+#     中国移动 -> cmnet      中国联通 -> 3gnet
+#     中国电信 -> ctnet      移动物联网卡 -> cmiot
+# 改完下一次拨号即生效，不用重启也不用重编译：
+#     uci set mifi.modem1.apn='cmnet'; uci set mifi.modem2.apn='cmnet'
+#     uci commit mifi
+#
+# --- retry_delay 说明 -------------------------------------------------------
+# 两次拨号之间的最小间隔（秒），用来压制"没插 SIM 时"的 pppd 重拨刷屏。
+# 以下为 2026-09-18 刷机后的**实测值**（两个 modem 合计，不是单个）：
+#   0   = 关闭节流，恢复原速  约 212 行/分钟（64KB 日志环只存 ~4.7 分钟）
+#   60  = 约 22 行/分钟（环可存 ~45 分钟历史）   ← 当前默认
+#   180 = 约 7 行/分钟（环可存 ~2.3 小时）
+# 注意：两个 modem 各自独立拨号，所以总行数 ≈ 单 modem 的 2 倍。
+# 插卡正常拨通后，这个间隔只在"连续失败"时才起作用，不影响正常连接。
+
+# SIM routing byte sent to the i2c power chip (0x39 on i2c-0) at boot.
+# Known-good values from hardware probing:
+#   0xa0 = S0=4 + S1=2 (bottom + patch)   0x60 = S0=2 + S1=2
+#   0x20 = S0=1 + S1=2                    0x80/0x90/0xb0 = S1 route 0/1/3
+#   0x00 = all off
+# ★★ 4G 通路总开关（2026-09-20 新增）----------------------------------------
+# option enable '1'（默认）= 正常启动两个模组，行为与以前完全一致。
+# option enable '0'        = 开机不启动 4G。效果：
+#     /etc/init.d/mifi-modem（START=18，排在 S20network 之前、且是普通 shell
+#     start() 会【同步阻塞】后面所有服务）立刻返回，并把 network.modemN.auto
+#     与 mwan3.modemN.enabled / default_rule 一并摘除 ⇒ 不再等模组初始化，
+#     WiFi 从实测的【内核 68.9 秒】提前到约 20~30 秒。
+#   代价：没有 4G 上行，LAN/WiFi 客户端无法上网（除非 wan 口插了网线）。
+#   生效方式：uci commit mifi && reboot（不需要重编译，也不需要刷机）。
+#   切回：把 '0' 改回 '1' 再 commit + reboot，auto/enabled 会自动恢复。
+#
+#   ⛔ 别用 routing='0x00' 来代替本开关 —— 那只是不给模组上电，
+#      mifi-modem 照样会跑，而且等 ttyUSB 会【等满 120 秒超时】才放弃，
+#      比现在更慢。这个坑 2026-09-20 特意记下来。
+config power 'power'
+	option routing '0xa0'
+	option enable '1'
