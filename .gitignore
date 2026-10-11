@@ -1,0 +1,59 @@
+# ============================================================
+#  fzs1-openwrt —— 对外发布仓 .gitignore
+#  原则：内部文档 / 别人的固件 / 敏感信息 一律不进仓。
+# ============================================================
+
+# ---- 编译产物（固件走 GitHub Releases，不进源码仓） ----
+build/
+bin/
+out/
+*.bin
+*.sqsh
+*.itb
+*.tar
+openwrt/
+.openwrt/
+.config
+.config.old
+tmp/
+staging_dir/
+build_dir/
+dl/
+feeds/
+
+# ---- 内部文档（时间线 / 调研 / 过程记录 —— 对外仓不含） ----
+00_时间线.md
+docs/
+*.log
+*.tmp
+nohup.out
+# 但保留对外说明文档
+!README*
+!docs-public/
+
+# ---- WorkBuddy / 编辑器 ----
+.workbuddy/
+.workbuddy-ai/
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# ---- 敏感信息 ----
+*.token
+.gitee_token
+.github_token
+key_rsa*
+*.pem
+
+# ---- 临时脚本输出 ----
+*_out.txt
+_*.txt
+
+# ---- tools/：内部调试脚本一律不进；只白名单少量对外构建脚本 ----
+tools/
+!tools/setup_ubuntu_deps.sh
+!tools/build_openwrt.sh
+!tools/patch_board_files.sh
+!tools/wslconfig.txt
+
