@@ -70,8 +70,11 @@ In one line: **flash once = new base + ready panel.**
 |---|---|
 | Address | `http://192.168.1.1/` |
 | Username | `root` |
-| Password | See the firmware Release notes |
-| Wi-Fi SSID | See the firmware Release notes / device label |
+| **Password** | **`admin`** |
+| **Wi-Fi SSID** | **`FZS-S1`** |
+| **Wi-Fi password** | **`1234567890`** |
+
+> ⚠️ **Security**: these are defaults — **change the admin and Wi-Fi passwords right after first login** (LuCI → System → Administration / Network → Wireless).
 
 ## Build from source
 
