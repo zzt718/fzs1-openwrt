@@ -29,6 +29,11 @@ docs/
 nohup.out
 # 但保留对外说明文档
 !README*
+# ⚠️ 但内部 README 绝不能进对外仓（上面 !README* 会把它们一起放行，必须再点名排除）
+README.project.md
+# 下面两个文件已不存在/不进仓，留作护栏：防止后手再建时被 !README* 误推到公开仓
+README.internal.md
+AGENTS.md
 !docs-public/
 
 # ---- WorkBuddy / 编辑器 ----
