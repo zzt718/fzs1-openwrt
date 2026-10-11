@@ -17,6 +17,16 @@ OpenWrt 23.05 (ramips/mt76x8), dual-modem RNDIS, `mwan3`, LuCI, SMS forwarding.
 
 ---
 
+**Screenshots**:
+
+| OpenWrt status page | FZS panel overview |
+|---|---|
+| ![Status page](images/status.jpg) | ![Panel overview](images/panel-overview.jpg) |
+
+> Left: firmware running on MIBOX-668M2 (kernel 5.15.167). Right: built-in Chinese panel — both modems' signal / operator / band / cell at a glance, with all feature entries.
+
+---
+
 ## What is this
 
 **A complete, flashable OpenWrt firmware** tailored for the "FZS S1" dual-SIM 4G CPE:
