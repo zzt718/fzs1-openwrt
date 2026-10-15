@@ -4,12 +4,12 @@
 # 本包用"预编译文件"方式打包：面板的 ipk 内容已解包放入 files/，
 # 由本 Makefile 直接安装进固件（等价于把 ipk 内置）。
 #
-# 来源：fzs1_panel 项目 luci-app-fzs_0.2.8_all.ipk
+# 来源：fzs1_panel 项目 luci-app-fzs_0.2.9_all.ipk
 #
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-fzs
-PKG_VERSION:=0.2.8
+PKG_VERSION:=0.2.9
 PKG_RELEASE:=1
 
 PKG_LICENSE:=GPL-3.0-or-later
