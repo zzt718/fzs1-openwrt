@@ -29,8 +29,8 @@ JOBS="$(nproc)"
 # 面板是独立开源项目 zzt718/fzs1-panel，其 ipk 从该项目 Release 下载。
 # 可用环境变量覆盖：
 #   FZS_PANEL_IPK=/path/to/luci-app-fzs_x.y.z_all.ipk   （本地文件，开发用）
-#   FZS_PANEL_VER=0.2.8                                  （指定版本，默认取下方）
-PANEL_VER="${FZS_PANEL_VER:-0.2.8}"
+#   FZS_PANEL_VER=0.2.9                                  （指定版本，默认取下方）
+PANEL_VER="${FZS_PANEL_VER:-0.2.9}"
 PANEL_REPO="zzt718/fzs1-panel"
 
 log(){ echo -e "\n\033[1;36m>>> $*\033[0m"; }
