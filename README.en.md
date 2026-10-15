@@ -113,7 +113,7 @@ flash by itself. This tool simply runs that TFTP server on your PC.
 
 ### Steps (~5 minutes)
 
-1. Download **`蜂助手S1救砖.zip`** from [Releases](../../releases) and extract it anywhere;
+1. Download **`FZS-S1-Rescue-v1.zip`** from [Releases](../../releases) and extract it anywhere;
 2. Connect the PC to the device with an Ethernet cable (any **LAN** port), then run `一键救砖.bat`
    (recommended: right-click -> **Run as administrator**);
 3. Follow the on-screen prompts: **power the device off -> poke the reset hole with a SIM-pin ->
