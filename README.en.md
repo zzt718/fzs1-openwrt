@@ -98,6 +98,44 @@ In one line: **flash once = new base + ready panel.**
 
 > ⚠️ **Security**: these are defaults — **change the admin and Wi-Fi passwords right after first login** (LuCI → System → Administration / Network → Wireless).
 
+## One-click rescue package
+
+The rescue package is a small Windows tool: extract it and run `一键救砖.bat`. It sets up a TFTP
+server on your PC, then works together with the recovery path built into the device to write the
+firmware back, bringing the device back to a working state — **no disassembly, no serial cable**.
+
+**This is an emergency measure, not the normal way to flash.** If the device still boots into its web
+UI, flash from the web page instead (see the previous section).
+
+It works because the device's bootloader (u-boot) contains a factory-grade TFTP recovery path:
+holding the reset key while powering on makes it download firmware from `192.168.1.3` and write it to
+flash by itself. This tool simply runs that TFTP server on your PC.
+
+### Steps (~5 minutes)
+
+1. Download **`蜂助手S1救砖.zip`** from [Releases](../../releases) and extract it anywhere;
+2. Connect the PC to the device with an Ethernet cable (any **LAN** port), then run `一键救砖.bat`
+   (recommended: right-click -> **Run as administrator**);
+3. Follow the on-screen prompts: **power the device off -> poke the reset hole with a SIM-pin ->
+   plug the power back in and keep holding for ~3 s**.
+
+Everything after that is automatic: download -> flash write -> auto reboot.
+**Do not cut power or unplug the cable during the process.**
+After ~5 minutes open `http://192.168.1.1`; if the login page appears, recovery succeeded.
+
+### FAQ
+
+| Question | Answer |
+|---|---|
+| **First boot is slow** | Normal. The device rebuilds its config area (~2-3 min) and may auto-reboot once |
+| **The tool shows no reaction** | Check: (1) the cable is in a **LAN** port (not WAN) (2) the tool window shows the TFTP service started (3) you ran it as **administrator** (4) reset really was poked with a pin |
+| **Will it brick the device?** | No. The bootloader is never written; as long as it is intact the recovery path stays available |
+| **What system will it install?** | This project's OpenWrt firmware. You can flash anything else from the web UI afterwards |
+
+> Warning: use it only on hardware you legally own. The tool touches **wired NICs only** and never your Wi-Fi.
+
+---
+
 ## Build from source
 
 You **do not** need to fork the OpenWrt main tree — scripts inject the customizations into the official source.
