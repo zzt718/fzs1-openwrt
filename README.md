@@ -11,8 +11,8 @@ OpenWrt 23.05（ramips/mt76x8）、双模组 RNDIS、`mwan3`、LuCI、中文面�
 
 > ⚠️ **刷机有风险，请先阅读 [免责声明](#免责声明)。** 本项目**不修改 IMEI**，也不含任何云控/后门。
 
-> 📦 **下载固件**：[Releases · 固件 v5](../../releases/tag/v5) → 下载 `*squashfs-sysupgrade.bin`。  
-> （Releases 列表里排在最上面的**不是固件**，是「一键救砖包」——那是设备起不来时才用的应急工具，见下文。）
+> 📦 **下载固件**：[Releases 列表](../../releases) → 选**标题以 `v` 开头**的最新一个（当前是 `v5`，以后会有 `v6`…）→ 下载 `*squashfs-sysupgrade.bin`。  
+> （「一键救砖包」是另一个独立 Release，只给系统已经起不来的设备用，别下错——见下文。）
 
 > 💚 **本项目完全免费、开源，无任何收费内容。** 如果你在花钱买它，请立即停止并到仓库 Issue 反馈。
 
@@ -94,7 +94,7 @@ OpenWrt 23.05（ramips/mt76x8）、双模组 RNDIS、`mwan3`、LuCI、中文面�
 
 2. 打开 `http://192.168.1.1:8888`，用户名 `root`、**密码留空** → 登录。
 3. 左侧菜单 → **系统 → 备份 / 刷写固件** → 页面下半部分「刷写新固件」→ 点「选择文件」，
-   选中从 [Releases · 固件 v5](../../releases/tag/v5) 下载的 `openwrt-ramips-mt76x8-mibox_668m2-squashfs-sysupgrade.bin`。
+   选中从 [Releases](../../releases) 里**标题以 `v` 开头的最新固件版本**下载的 `openwrt-ramips-mt76x8-mibox_668m2-squashfs-sysupgrade.bin`。
 4. ⚠️ **不要勾「保留当前配置」**。原厂固件的配置和 OpenWrt 不兼容，勾了这一项刷完设备大概率起不来。
 5. 点「刷写固件…」→ 确认 → 等设备自动重启（约 2~3 分钟，**中途不要断电**）。
    首次启动会重建配置区，期间可能自动再重启一次，属正常现象。
@@ -110,7 +110,7 @@ OpenWrt 23.05（ramips/mt76x8）、双模组 RNDIS、`mwan3`、LuCI、中文面�
 
 ### B. 已是 OpenWrt：网页升级
 
-1. 到 [Releases · 固件 v5](../../releases/tag/v5) 下载 `openwrt-ramips-mt76x8-mibox_668m2-squashfs-sysupgrade.bin`；
+1. 到 [Releases](../../releases) 里**标题以 `v` 开头的最新固件版本**，下载 `openwrt-ramips-mt76x8-mibox_668m2-squashfs-sysupgrade.bin`；
 2. **网页刷**：LuCI → 系统 → 备份/刷写固件 → 选该文件 → 刷写；  
    **命令行刷**：`sysupgrade -F -n /tmp/<固件>.bin`（`-n` 清配置，跨版本建议）；
 3. 等待重启（约 1.5~2 分钟），浏览器打开 `http://192.168.1.1/`。
@@ -145,7 +145,8 @@ OpenWrt 23.05（ramips/mt76x8）、双模组 RNDIS、`mwan3`、LuCI、中文面�
 
 ### 操作步骤（约 5 分钟）
 
-1. 从 [Releases · rescue-v1](../../releases/tag/rescue-v1) 下载 **`FZS-S1-Rescue-v1.zip`**，解压到任意目录；
+1. 从 [Releases](../../releases) 下载**最新的一键救砖包**（标题以「救砖包」开头的那个，附件名形如
+   `FZS-S1-Rescue-v1.zip`），解压到任意目录；
 2. 用网线连接电脑与设备（设备的**任意 LAN 口**），运行 **`一键救砖.bat`**
    （建议：右键 → **以管理员身份运行**）；
 3. 按屏幕提示操作设备：**设备断电 → 用取卡针/回形针捅住 reset 小孔 → 插上电源，继续捅住约 3 秒后松开**。
