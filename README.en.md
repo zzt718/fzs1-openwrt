@@ -19,7 +19,9 @@ OpenWrt 23.05 (ramips/mt76x8), dual-modem RNDIS, `mwan3`, LuCI, SMS forwarding.
 
 > ⚠️ **Flashing carries risk — read the [Disclaimer](#disclaimer) first.** This project **does not modify IMEI** and contains no cloud-control or backdoor.
 
-> 📦 **Download firmware:** [Releases](../../releases/latest) → pick the latest → download `*squashfs-sysupgrade.bin`.
+> 📦 **Download firmware:** [Releases · firmware v5](../../releases/tag/v5) → download `*squashfs-sysupgrade.bin`.  
+> (The top entry in the Releases list is **not** the firmware — it is the one-click rescue package,
+> an emergency tool for a device that no longer boots. See below.)
 
 > 💚 **This project is completely free and open source.** If you paid for it, stop and report it via a repo Issue.
 
@@ -103,7 +105,7 @@ own "Backup / Flash Firmware" page. **No disassembly, no serial cable.**
 
 2. Open `http://192.168.1.1:8888`, user `root`, **blank password**.
 3. **System → Backup / Flash Firmware** → in the "Flash new firmware image" section, choose the
-   `openwrt-ramips-mt76x8-mibox_668m2-squashfs-sysupgrade.bin` downloaded from [Releases](../../releases/latest).
+   `openwrt-ramips-mt76x8-mibox_668m2-squashfs-sysupgrade.bin` downloaded from [Releases · firmware v5](../../releases/tag/v5).
 4. ⚠️ **Do NOT keep the current configuration.** Stock and OpenWrt configs are incompatible; keeping it
    will most likely leave the device unable to boot.
 5. Click "Flash image…" → confirm → wait for the automatic reboot (~2–3 min, **do not power off**).
@@ -121,7 +123,7 @@ own "Backup / Flash Firmware" page. **No disassembly, no serial cable.**
 
 ### B. Already on OpenWrt: web upgrade
 
-1. Download `openwrt-ramips-mt76x8-mibox_668m2-squashfs-sysupgrade.bin` from [Releases](../../releases/latest);
+1. Download `openwrt-ramips-mt76x8-mibox_668m2-squashfs-sysupgrade.bin` from [Releases · firmware v5](../../releases/tag/v5);
 2. **Web**: LuCI → System → Backup/Flash Firmware → choose the file → flash;
    **CLI**: `sysupgrade -F -n /tmp/<firmware>.bin` (`-n` wipes config; recommended across versions);
 3. Wait ~1.5–2 min, then browse to `http://192.168.1.1/`.
@@ -158,7 +160,7 @@ flash by itself. This tool simply runs that TFTP server on your PC.
 
 ### Steps (~5 minutes)
 
-1. Download **`FZS-S1-Rescue-v1.zip`** from [Releases](../../releases) and extract it anywhere;
+1. Download **`FZS-S1-Rescue-v1.zip`** from [Releases · rescue-v1](../../releases/tag/rescue-v1) and extract it anywhere;
 2. Connect the PC to the device with an Ethernet cable (any **LAN** port), then run `一键救砖.bat`
    (recommended: right-click -> **Run as administrator**);
 3. Follow the on-screen prompts: **power the device off -> poke the reset hole with a SIM-pin ->
