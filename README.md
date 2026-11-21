@@ -167,6 +167,8 @@ OpenWrt 23.05（ramips/mt76x8）、双模组 RNDIS、`mwan3`、LuCI、中文面�
 
 ## 从源码构建
 
+两条路，效果一样：**本地跑 `build.sh`**（见下），或者**让 GitHub Actions 替你编**（见本节末尾，不用装 Linux）。
+
 本项目**不要求你改 OpenWrt 主仓库**，用脚本把定制内容注入官方源码树即可。
 
 ```bash
@@ -185,7 +187,21 @@ bash build.sh
 > 面板（luci-app-fzs）默认从姊妹项目 [fzs1-panel](../../../fzs1-panel) 的 Release 下载 ipk 内置；  
 > 也可用 `FZS_PANEL_IPK=/path/to/*.ipk bash build.sh inject` 指定本地文件。
 
-> 也支持 **GitHub Actions 在线编译**（见 `.github/workflows/build.yml`）——手动触发或推 tag 自动出固件到 Release。
+### 在线编译（GitHub Actions）
+
+不想装 WSL / Linux 环境，可以直接用仓库自带的工作流（`.github/workflows/build.yml`）：
+
+1. 打开本仓 **Actions** 页 → 左侧选 **Build firmware** → 点 **Run workflow**（分支选 `main`）→ 运行；
+2. 跑完后在本次运行的 **Artifacts** 里下载 `fzs1-openwrt-firmware`，里面就是 `*squashfs-sysupgrade.bin` 和 initramfs；
+3. 也可以推一个 `v*` 的 tag，会自动编译并把固件挂到 Release。
+
+- 首次约 **1~2 小时**（要拉源码 + 建工具链），之后有缓存会快不少；
+- **fork 出去可以直接用**：工作流里没有任何密钥，面板 ipk 走公开 Release 下载，不需要额外配置；
+- ⚠️ 想让它自动发 Release，需要在自己仓库的 **Settings → Actions → General → Workflow permissions**
+  里选 **Read and write**，否则打 tag 那一步会因权限失败。
+
+> 说明：本项目的正式发版仍是**本地编译 + 手工发 Release**，这条工作流主要留给想自己编的人；
+> 它跑的就是同一套 `build.sh`，产出与本地编译等价。
 
 ## 目录结构
 

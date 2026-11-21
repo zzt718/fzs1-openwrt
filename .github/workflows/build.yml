@@ -1,6 +1,9 @@
 # ============================================================================
 #  fzs1-openwrt —— GitHub Actions 在线编译
 #
+#  ⚠️ 定位：本仓的正式发版仍是「本地编译 + 手工发 Release」，**不依赖这条工作流**。
+#     它主要给想自己编的人（含 fork 出去的人）用：跑的就是同一套 build.sh，产出等价。
+#
 #  触发方式：
 #    - 手动：Actions 页面 → Build firmware → Run workflow
 #    - 打标签：git tag v1.0.0 && git push --tags  → 自动编译并发布到 Release

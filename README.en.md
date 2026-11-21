@@ -183,6 +183,9 @@ After ~5 minutes open `http://192.168.1.1`; if the login page appears, recovery 
 
 ## Build from source
 
+Two ways, same result: **run `build.sh` locally** (below), or **let GitHub Actions build it for you**
+(end of this section — no Linux environment needed).
+
 You **do not** need to fork the OpenWrt main tree — scripts inject the customizations into the official source.
 
 ```bash
@@ -201,8 +204,22 @@ bash build.sh
 > The panel (luci-app-fzs) is fetched from the sister project [fzs1-panel](../../../fzs1-panel)
 > Release by default; or set `FZS_PANEL_IPK=/path/to/*.ipk bash build.sh inject`.
 
-> **GitHub Actions online build** is supported (see `.github/workflows/build.yml`) —
-> run manually or push a tag to auto-attach the firmware to a Release.
+### Online build (GitHub Actions)
+
+No WSL / Linux box? Use the workflow shipped with this repo (`.github/workflows/build.yml`):
+
+1. Open the **Actions** tab → pick **Build firmware** on the left → **Run workflow** (branch `main`) → run it;
+2. When it finishes, download `fzs1-openwrt-firmware` from the run's **Artifacts** — it contains
+   `*squashfs-sysupgrade.bin` and the initramfs;
+3. Or push a `v*` tag and it will build and attach the firmware to a Release automatically.
+
+- First run takes **~1–2 hours** (source download + toolchain); later runs reuse the cache.
+- **Forks work out of the box**: the workflow holds no secrets and pulls the panel ipk from a public Release.
+- ⚠️ To let it publish Releases automatically, enable write access in your own repo under
+  **Settings → Actions → General → Workflow permissions → Read and write**.
+
+> Note: official releases of this project are still **built locally and published by hand**; this workflow
+> is mainly for people who want to build it themselves. It runs the very same `build.sh`.
 
 ## Repository layout
 
