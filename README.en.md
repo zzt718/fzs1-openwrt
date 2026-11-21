@@ -80,11 +80,51 @@ In one line: **flash once = new base + ready panel.**
 
 ## Install (flashing)
 
-1. Make sure the device **already boots** OpenWrt (community or an older build of this firmware);
-2. Download `openwrt-ramips-mt76x8-mibox_668m2-squashfs-sysupgrade.bin` from [Releases](../../releases/latest);
-3. **Web**: LuCI → System → Backup/Flash Firmware → choose the file → flash;
+Pick your case first:
+
+| Current state | What to do |
+| --- | --- |
+| **Stock (vendor) firmware** (cloud-controlled; 80-port console + LuCI on 8888) | See **A. From stock firmware** below |
+| **Already on OpenWrt** (community build / older build of this firmware) | See **B. Web upgrade** below |
+| **Web UI unreachable / device won't boot** | See **One-click rescue package** below (u-boot path, independent of the OS) |
+
+### A. From stock firmware (first install)
+
+The stock firmware ships a complete OpenWrt web UI (LuCI) on **port 8888** — flashing goes through its
+own "Backup / Flash Firmware" page. **No disassembly, no serial cable.**
+
+1. **Clear the 8888 password first.** The stock root password is set at the factory and nobody knows it,
+   so wipe it: open `http://192.168.1.1/SysCommand.htm` (the stock 80-port "system command" page,
+   login `admin` / `admin`) and run:
+
+   ```sh
+   passwd -d root
+   ```
+
+2. Open `http://192.168.1.1:8888`, user `root`, **blank password**.
+3. **System → Backup / Flash Firmware** → in the "Flash new firmware image" section, choose the
+   `openwrt-ramips-mt76x8-mibox_668m2-squashfs-sysupgrade.bin` downloaded from [Releases](../../releases/latest).
+4. ⚠️ **Do NOT keep the current configuration.** Stock and OpenWrt configs are incompatible; keeping it
+   will most likely leave the device unable to boot.
+5. Click "Flash image…" → confirm → wait for the automatic reboot (~2–3 min, **do not power off**).
+   The first boot rebuilds the config area and may reboot once more — that is normal.
+6. The web UI moves to **port 80**: `http://192.168.1.1` (**no longer 8888**). Credentials are in "First login" below.
+
+> If step 5 shows an "Image check failed" warning and asks you to force the upgrade, tick **Force upgrade**
+> and continue — this is common when switching between systems and does not affect the result.
+
+> Flashing only writes the `firmware` partition; **u-boot and the factory (calibration) partition are untouched**,
+> and the IMEI lives in the modem module, so it is unaffected too.
+
+> **If you simply cannot get into 8888** (password won't clear, page won't open): skip it and use the
+> **One-click rescue package** below — it does not depend on the OS and writes the firmware from u-boot instead.
+
+### B. Already on OpenWrt: web upgrade
+
+1. Download `openwrt-ramips-mt76x8-mibox_668m2-squashfs-sysupgrade.bin` from [Releases](../../releases/latest);
+2. **Web**: LuCI → System → Backup/Flash Firmware → choose the file → flash;
    **CLI**: `sysupgrade -F -n /tmp/<firmware>.bin` (`-n` wipes config; recommended across versions);
-4. Wait ~1.5–2 min, then browse to `http://192.168.1.1/`.
+3. Wait ~1.5–2 min, then browse to `http://192.168.1.1/`.
 
 ### First login
 
@@ -103,6 +143,11 @@ In one line: **flash once = new base + ready panel.**
 The rescue package is a small Windows tool: extract it and run `一键救砖.bat`. It sets up a TFTP
 server on your PC, then works together with the recovery path built into the device to write the
 firmware back, bringing the device back to a working state — **no disassembly, no serial cable**.
+
+> **Not to be confused with "restore stock firmware".** Restoring stock is a web flash of the vendor
+> image while the web UI is still reachable; this rescue tool is for when the system no longer boots —
+> hold reset while powering on to enter u-boot and push the firmware over TFTP. Different path,
+> different image, different precondition.
 
 **This is an emergency measure, not the normal way to flash.** If the device still boots into its web
 UI, flash from the web page instead (see the previous section).
@@ -190,7 +235,9 @@ fzs1-openwrt/
 ## FAQ
 
 **Q: Can it brick? Can I go back to stock?**
-A: A failed sysupgrade usually still leaves uboot/recovery reachable; the stock-restore path is in the project docs (if provided).
+A: A failed flash usually still leaves u-boot recovery reachable — use the one-click rescue package below.
+To go back to vendor firmware, the image itself is not in this repo for copyright reasons; the steps are
+in the sister project [fzs1-panel](https://github.com/zzt718/fzs1-panel) (《如何恢复原厂固件》).
 
 **Q: Can I install other plugins?**
 A: Yes. It's standard OpenWrt 23.05 — `opkg update && opkg install <pkg>` (needs opkg feed reachability).
