@@ -1,5 +1,5 @@
 # ============================================================================
-#  fzs1-openwrt —— GitHub Actions 在线编译（架构预留，可选用）
+#  fzs1-openwrt —— GitHub Actions 在线编译
 #
 #  触发方式：
 #    - 手动：Actions 页面 → Build firmware → Run workflow
@@ -8,9 +8,10 @@
 #  产物：openwrt-ramips-mt76x8-mibox_668m2-squashfs-sysupgrade.bin (+ initramfs)
 #
 #  ⚠️ 首次启用须知：
-#   - 编译需 1~2 小时（GitHub 免费额度足够）；
-#   - 首次运行会缓存 OpenWrt 源码与工具链（约 1~2GB，用 cache 加速后续构建）；
-#   - 需在仓库设置里给 Actions 读写权限（Settings → Actions → General → Workflow permissions → Read and write）。
+#   - 编译需 1~2 小时（公开仓库不计费）；
+#   - 首次运行会缓存 OpenWrt 源码与工具链（约 2~4GB，用 cache 加速后续构建）；
+#   - 需在仓库设置里给 Actions 读写权限（Settings → Actions → General →
+#     Workflow permissions → Read and write），否则打 tag 时发不了 Release。
 # ============================================================================
 name: Build firmware
 
@@ -23,10 +24,23 @@ on:
 permissions:
   contents: write      # 打 tag 时需要发布 Release
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-22.04
+    timeout-minutes: 360
     steps:
+      - name: Free disk space
+        # OpenWrt 全量编译要 20GB 以上，runner 默认余量不够，先清掉预装的 SDK
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo apt-get clean
+          df -h /
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -59,6 +73,11 @@ jobs:
 
       - name: Build
         run: bash build.sh build
+
+      - name: Show artifacts
+        run: |
+          ls -lh build/
+          sha256sum build/*.bin || true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
